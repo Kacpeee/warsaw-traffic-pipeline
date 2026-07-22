@@ -12,18 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install dbt
-        run: pip install dbt-duckdb==1.10.1
+        run: pip install dbt-duckdb
 
-      - name: Install packages
+      - name: Install dbt packages
         working-directory: warsaw_dbt
         run: dbt deps
 
@@ -34,7 +35,3 @@ jobs:
       - name: Compile models
         working-directory: warsaw_dbt
         run: dbt compile --profiles-dir . --no-partial-parse
-
-      - name: Check for uncompiled SQL errors
-        working-directory: warsaw_dbt
-        run: dbt list --profiles-dir . --resource-type model

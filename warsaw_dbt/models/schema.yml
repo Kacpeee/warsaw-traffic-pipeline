@@ -3,25 +3,37 @@
 models:
   - name: stg_positions
     description: "Cleaned ZTM vehicle positions - typed, invalid coordinates filtered out."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [vehicle_number, vehicle_time]
     columns:
       - name: vehicle_number
         description: "Vehicle side number - identifies a physical vehicle."
         tests: [not_null]
       - name: lat
-        description: "Latitude (WGS84)."
-        tests: [not_null]
+        description: "Latitude (WGS84), constrained to the Warsaw area."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 51.9, max_value: 52.5}
       - name: lon
-        description: "Longitude (WGS84)."
-        tests: [not_null]
+        description: "Longitude (WGS84), constrained to the Warsaw area."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 20.7, max_value: 21.3}
+      - name: vehicle_type
+        description: "1 = bus, 2 = tram."
+        tests:
+          - accepted_values: {values: [1, 2]}
 
   - name: stg_gtfs_stops
     description: "GTFS stops dimension - stop locations and names."
     columns:
       - name: stop_id
-        description: "GTFS stop identifier."
-        tests: [not_null]
+        tests: [not_null, unique]
       - name: stop_lat
-        tests: [not_null]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 51.5, max_value: 53.0}
 
   - name: stg_gtfs_routes
     description: "GTFS routes dimension. line is the public line number."
@@ -29,7 +41,6 @@ models:
       - name: route_id
         tests: [not_null, unique]
       - name: line
-        description: "Public line number, e.g. '523' or 'N01'."
         tests: [not_null]
 
   - name: stg_gtfs_trips
@@ -37,45 +48,134 @@ models:
     columns:
       - name: trip_id
         tests: [not_null, unique]
+      - name: route_id
+        description: "Must reference an existing route."
+        tests:
+          - relationships:
+              to: ref('stg_gtfs_routes')
+              field: route_id
 
   - name: stg_gtfs_stop_times
-    description: "Scheduled arrivals per trip and stop, limited to collected service dates."
+    description: "Scheduled arrivals per trip and stop, limited to collected dates."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [trip_id, stop_sequence]
     columns:
       - name: trip_id
-        tests: [not_null]
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_gtfs_trips')
+              field: trip_id
+      - name: stop_id
+        tests:
+          - relationships:
+              to: ref('stg_gtfs_stops')
+              field: stop_id
       - name: scheduled_arrival
-        description: "Scheduled arrival timestamp, handles GTFS times past 24h."
         tests: [not_null]
 
+  - name: dim_calendar
+    description: "Date spine covering the collected period."
+    columns:
+      - name: date_day
+        tests: [not_null, unique]
+      - name: day_of_week
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 6}
+
   - name: int_vehicle_moves
-    description: "Vehicle movements: distance, time and speed between consecutive positions."
+    description: "Vehicle movements: distance, time and speed between positions."
     columns:
       - name: speed_kmh
-        description: "Speed in km/h between two consecutive positions."
-        tests: [not_null]
+        description: "Speed in km/h; values above 100 are treated as GPS jumps."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
+      - name: seconds_diff
+        description: "Gap between consecutive positions, 1 s to 10 min."
+        tests:
+          - dbt_utils.accepted_range: {min_value: 1, max_value: 600}
 
   - name: int_vehicle_delays
     description: "Live positions matched to scheduled stops; delay = actual minus scheduled."
     columns:
       - name: delay_seconds
-        description: "Positive = late, negative = early."
-        tests: [not_null]
+        description: "Positive = late, negative = early. Bounded by the 15-min match window."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: -900, max_value: 900}
       - name: meters_to_stop
         description: "Distance to the matched stop, at most 100 m."
-        tests: [not_null]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
+      - name: stop_id
+        tests:
+          - relationships:
+              to: ref('stg_gtfs_stops')
+              field: stop_id
+
+  - name: int_headway
+    description: "Gaps between consecutive vehicles of a line at a stop."
+    columns:
+      - name: headway_minutes
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0.1, max_value: 120}
 
   - name: mart_line_speed
-    description: "Average speed per line - analytical output."
+    description: "Average speed per line."
     columns:
       - name: line
         tests: [not_null, unique]
       - name: avg_speed_kmh
-        tests: [not_null]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
 
   - name: mart_line_punctuality
-    description: "Punctuality per line: average delay, share of on-time / late / early."
+    description: "Punctuality per line: average delay and share of on-time / late / early."
     columns:
       - name: line
         tests: [not_null, unique]
       - name: avg_delay_min
         tests: [not_null]
+      - name: pct_on_time
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
+
+  - name: mart_line_regularity
+    description: "Service regularity per line for frequent services."
+    columns:
+      - name: line
+        tests: [not_null, unique]
+      - name: irregularity_index
+        description: "Stddev / mean of headway. Below 0.5 predictable, above 1.0 erratic."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 5}
+      - name: pct_bunched
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
+
+  - name: mart_punctuality_by_hour
+    description: "Delay aggregated by hour of day."
+    columns:
+      - name: hour_of_day
+        tests:
+          - not_null
+          - unique
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 23}
+
+  - name: mart_speed_by_hour
+    description: "Speed per line and hour of day."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [line, hour_of_day]
+
+  - name: mart_worst_stops
+    description: "Stops accumulating the largest delays."
+    columns:
+      - name: stop_id
+        tests: [not_null, unique]

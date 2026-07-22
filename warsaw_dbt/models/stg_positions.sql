@@ -1,6 +1,6 @@
 ﻿-- STAGING: clean raw vehicle positions
 -- Each collector writes its own file (buses / trams) to avoid concurrent
--- writes to a shared CSV; DuckDB reads them all through a glob pattern.
+-- writes; DuckDB reads them all through a glob pattern.
 {{ config(
     materialized='incremental',
     unique_key=['vehicle_number', 'vehicle_time'],
@@ -13,7 +13,6 @@ with source as (
         '../data/positions_*.csv',
         header = false,
         all_varchar = true,
-        union_by_name = false,
         columns = {
             'fetch_time': 'VARCHAR',
             'vehicle_number': 'VARCHAR',
@@ -44,9 +43,25 @@ cleaned as (
       and try_cast(vehicle_time as timestamp) is not null
       and try_cast(lat as double) between 51.9 and 52.5
       and try_cast(lon as double) between 20.7 and 21.3
+),
+
+-- A stationary vehicle reports the same vehicle_time on every poll, so keep
+-- only the first observation of each (vehicle, timestamp) pair.
+deduplicated as (
+    select fetch_time, vehicle_time, vehicle_number, line, brigade,
+           vehicle_type, lat, lon
+    from (
+        select *,
+               row_number() over (
+                   partition by vehicle_number, vehicle_time
+                   order by fetch_time
+               ) as rn
+        from cleaned
+    )
+    where rn = 1
 )
 
-select distinct * from cleaned
+select * from deduplicated
 {% if is_incremental() %}
   where fetch_time > (select coalesce(max(fetch_time), timestamp '1970-01-01') from {{ this }})
 {% endif %}

@@ -48,7 +48,7 @@ c3.metric('Matched to schedule', f"{int(overview.matched):,}")
 c4.metric('Median speed', f"{overview.med_speed} km/h")
 c5.metric('Median delay', f"{overview.med_delay} min")
 
-tab1, tab2, tab3 = st.tabs(['Speed by hour', 'Punctuality', 'Worst stops'])
+tab1, tab2, tab3, tab4 = st.tabs(['Speed by hour', 'Punctuality', 'Worst stops', 'Regularity'])
 
 # --- speed -------------------------------------------------------------
 with tab1:
@@ -114,3 +114,53 @@ with tab3:
             title='Average delay per stop')
         st.plotly_chart(style(fig, 600), width='stretch')
         st.dataframe(stops, width='stretch', hide_index=True)
+
+
+# --- regularity ---------------------------------------------------------
+with tab4:
+    st.caption(
+        "Headway is the gap between consecutive vehicles of the same line at a stop. "
+        "The irregularity index is the standard deviation divided by the mean: "
+        "below 0.5 means a predictable rhythm, above 1.0 means the wait is a lottery. "
+        "Only frequent services (average headway under 20 min) are shown."
+    )
+
+    reg = q('select * from mart_line_regularity')
+    if reg.empty:
+        st.info('Not enough data yet.')
+    else:
+        c1, c2 = st.columns(2)
+        with c1:
+            worst = reg.head(15).copy()
+            worst['line'] = worst['line'].astype(str)
+            fig = px.bar(worst, x='irregularity_index', y='line', orientation='h',
+                         color='irregularity_index', color_continuous_scale='RdYlGn_r',
+                         text_auto='.2f',
+                         labels={'irregularity_index': 'Irregularity index', 'line': 'Line'},
+                         title='Least predictable lines')
+            fig.update_traces(textposition='outside')
+            fig.update_layout(yaxis={'categoryorder': 'total ascending'})
+            st.plotly_chart(style(fig, 480), width='stretch')
+
+        with c2:
+            bunch = reg.nlargest(15, 'pct_bunched').copy()
+            bunch['line'] = bunch['line'].astype(str)
+            fig = px.bar(bunch, x='pct_bunched', y='line', orientation='h',
+                         color='pct_bunched', color_continuous_scale='Reds',
+                         text_auto='.1f',
+                         labels={'pct_bunched': '% of arrivals bunched', 'line': 'Line'},
+                         title='Most bunching (vehicles arriving together)')
+            fig.update_traces(textposition='outside')
+            fig.update_layout(yaxis={'categoryorder': 'total ascending'})
+            st.plotly_chart(style(fig, 480), width='stretch')
+
+        fig = px.scatter(reg, x='avg_headway_min', y='irregularity_index',
+                         size='observations', hover_name='line',
+                         color='pct_bunched', color_continuous_scale='Reds',
+                         labels={'avg_headway_min': 'Average headway (min)',
+                                 'irregularity_index': 'Irregularity index',
+                                 'pct_bunched': '% bunched'},
+                         title='Frequency vs predictability')
+        st.plotly_chart(style(fig, 420), width='stretch')
+
+        st.dataframe(reg, width='stretch', hide_index=True)
