@@ -48,7 +48,8 @@ c3.metric('Matched to schedule', f"{int(overview.matched):,}")
 c4.metric('Median speed', f"{overview.med_speed} km/h")
 c5.metric('Median delay', f"{overview.med_delay} min")
 
-tab1, tab2, tab3, tab4 = st.tabs(['Speed by hour', 'Punctuality', 'Worst stops', 'Regularity'])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ['Speed by hour', 'Punctuality', 'Worst stops', 'Regularity', 'Segments'])
 
 # --- speed -------------------------------------------------------------
 with tab1:
@@ -164,3 +165,44 @@ with tab4:
         st.plotly_chart(style(fig, 420), width='stretch')
 
         st.dataframe(reg, width='stretch', hide_index=True)
+
+
+# --- route segments -----------------------------------------------------
+with tab5:
+    st.caption(
+        "Where time is actually lost: each row is a segment between two "
+        "consecutive stops, comparing observed travel time against the "
+        "timetable. A segment consistently over schedule points to a planning "
+        "gap or a recurring bottleneck rather than a one-off delay."
+    )
+
+    seg = q('select * from mart_slowest_segments')
+    if seg.empty:
+        st.info('Not enough data yet.')
+    else:
+        seg['route'] = seg['from_stop'].str.slice(0, 18) + ' \u2192 ' + seg['to_stop'].str.slice(0, 18)
+        seg['label'] = seg['line'].astype(str) + ':  ' + seg['route']
+
+        top = seg.head(10).sort_values('avg_lost_min')
+        fig = px.bar(top, x='avg_lost_min', y='label', orientation='h',
+                     color='avg_lost_min', color_continuous_scale='Reds',
+                     text_auto='.1f',
+                     labels={'avg_lost_min': 'Minutes lost per run', 'label': ''},
+                     title='Biggest bottlenecks')
+        fig.update_traces(textposition='outside', cliponaxis=False)
+        st.plotly_chart(style(fig, 400), width='stretch')
+
+        st.markdown('**Worst segments in detail**')
+        detail = seg.head(20)[
+            ['line', 'from_stop', 'to_stop', 'avg_scheduled_min',
+             'avg_actual_min', 'avg_lost_min', 'observations']
+        ].rename(columns={
+            'line': 'Line',
+            'from_stop': 'From',
+            'to_stop': 'To',
+            'avg_scheduled_min': 'Scheduled (min)',
+            'avg_actual_min': 'Actual (min)',
+            'avg_lost_min': 'Lost (min)',
+            'observations': 'Runs',
+        })
+        st.dataframe(detail, width='stretch', hide_index=True)
