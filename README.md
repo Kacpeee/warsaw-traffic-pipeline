@@ -1,75 +1,73 @@
-﻿# Warsaw Public Transport Speed Pipeline
+﻿# Warsaw Transit Pipeline
 
-A data pipeline that collects **live vehicle positions** from Warsaw's public
-transport API and computes the **average speed of each line** using a layered
-dbt model (staging -> intermediate -> marts) on DuckDB.
+Data pipeline that collects **live vehicle positions** from Warsaw's public transport API,
+joins them with the **GTFS timetable**, and computes **speed** and **punctuality** per line,
+stop and hour.
 
-## What it does
+## Findings
 
-1. **Collect** – a Python collector polls the Warsaw ZTM API every minute and
-   appends live vehicle positions (GPS, line, timestamp) to a raw CSV.
-2. **Model** – dbt transforms the raw data through three layers:
-   - `stg_positions` – clean and type the raw data, drop invalid coordinates
-   - `int_vehicle_moves` – compute distance, elapsed time and **speed**
-     between consecutive positions of each vehicle (window functions)
-   - `mart_line_speed` – aggregate to average speed per line
-3. **Test** – dbt tests validate data quality (not-null, uniqueness).
+| Metric | Night (1-3 AM) | Midday (1-2 PM) |
+|---|---|---|
+| Average speed | 19.3 km/h | 13.4 km/h |
+| Time spent crawling (<5 km/h) | 26% | 35% |
 
-## Tech stack
+Median delay across the network is under a minute; suburban lines (L16, L26) run
+3-5 minutes late on average.
 
-- **Python** – data collection from a REST API
-- **dbt** – layered SQL modeling, tests, documentation, lineage
-- **DuckDB** – local analytical database
-- *(planned)* Apache Airflow – orchestration; OpenMetadata – cataloging
+## Stack
 
-## Architecture
+**Python** (API collector) · **dbt** (12 models, 21 tests) · **DuckDB** · **Airflow** (hourly orchestration)
+
+## How it works
 
 \\\
-Warsaw ZTM API
-      |
-      v  (collect.py, every 60s)
-raw_positions.csv        <- raw layer
-      |
-      v  (dbt)
-stg_positions            <- staging: cleaned & typed
-      |
-      v
-int_vehicle_moves        <- intermediate: speed per movement
-      |
-      v
-mart_line_speed          <- marts: average speed per line
+ZTM API  ──►  raw CSV  ──┐
+                         ├──►  staging  ──►  intermediate  ──►  marts
+GTFS zip ──►  txt files ─┘      (typed,        (speed,          (per line,
+                                 cleaned)       delays)          hour, stop)
 \\\
 
-## How to run
+**Live positions** are polled every minute and matched to the timetable via
+\line + brigade\. A position within 100 m of a scheduled stop counts as an arrival;
+the delay is the difference between the actual and scheduled timestamp.
+
+**Models**
+
+| Layer | Models |
+|---|---|
+| staging | positions, GTFS stops / routes / trips / stop_times |
+| intermediate | \int_vehicle_moves\ (speed), \int_vehicle_delays\ (schedule adherence) |
+| marts | speed per line, punctuality per line, per hour, worst stops |
+
+## Data quality
+
+Real feeds are messy. The pipeline handles:
+
+- stale positions (the API returns last-known location, sometimes years old)
+- GPS jumps producing impossible speeds
+- GTFS times past midnight (\25:30:00\)
+- mixed-type IDs (\E-1\, \M1\) breaking CSV type inference
+
+## Run it
 
 \\\ash
-# 1. Environment
-conda create -n traffic python=3.11 -y
-conda activate traffic
+conda create -n traffic python=3.11 -y && conda activate traffic
 pip install requests python-dotenv warsaw-data-api dbt-duckdb duckdb
 
-# 2. Set your API key (get one at https://api.um.warszawa.pl/)
-echo "WARSAW_DATA_API_KEY=your_key" > .env
+echo "WARSAW_DATA_API_KEY=your_key" > .env      # get one at api.um.warszawa.pl
+curl -LfO 'https://mkuran.pl/gtfs/warsaw.zip' && unzip warsaw.zip -d gtfs/
 
-# 3. Collect data (runs ~1h, polling every minute)
-python collect.py
-
-# 4. Run the dbt pipeline
-cd warsaw_dbt
-dbt run
-dbt test
+python collect.py                                # collect live positions
+cd warsaw_dbt && dbt run && dbt test             # build and validate models
 \\\
 
-## Data quality notes
+Or run the whole thing on a schedule:
 
-Real GPS data is noisy. The pipeline handles this by:
-- filtering positions outside a Warsaw bounding box,
-- dropping movements with implausible speeds (GPS jumps),
-- keeping only time gaps between 1s and 10 minutes.
+\\\ash
+cd airflow && docker compose up -d               # Airflow at localhost:8080
+\\\
 
 ## Notes
 
-Vehicle positions carry their own timestamp, which can lag behind the fetch
-time (e.g. parked vehicles at night). Speed is computed from the vehicle
-timestamp, not the fetch time. Collecting during daytime peak hours yields
-the most meaningful movement data.
+Data is collected only while the machine is running, so coverage has gaps.
+Per-stop statistics are based on small samples and should be read as directional.
