@@ -1,4 +1,6 @@
-﻿-- INTERMEDIATE layer: compute vehicle movement
+﻿
+{{ config(materialized='table') }}
+-- INTERMEDIATE layer: compute vehicle movement
 -- For each vehicle, compare consecutive positions over time
 -- and derive distance, elapsed time and speed.
 with positions as (
@@ -43,3 +45,4 @@ select *
 from with_speed
 where speed_kmh is not null
   and speed_kmh <= 100    -- drop physically impossible speeds (GPS jumps)
+

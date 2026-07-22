@@ -1,4 +1,6 @@
-﻿-- MARTS layer: average speed per line
+﻿
+{{ config(materialized='table') }}
+-- MARTS layer: average speed per line
 -- Final analytical output: which lines run fastest/slowest.
 select
     line,
@@ -10,3 +12,4 @@ from {{ ref('int_vehicle_moves') }}
 group by line
 having count(*) >= 5    -- only lines with a meaningful number of measurements
 order by avg_speed_kmh desc
+

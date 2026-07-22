@@ -1,4 +1,6 @@
-﻿-- STAGING layer: clean raw vehicle positions
+﻿
+{{ config(materialized='table') }}
+-- STAGING layer: clean raw vehicle positions
 -- Source: raw_positions.csv (collected by collect.py)
 -- The CSV has no header, so columns are named and typed explicitly here.
 with source as (
@@ -38,3 +40,4 @@ cleaned as (
       and cast(lon as double) between 20.7 and 21.3
 )
 select * from cleaned
+

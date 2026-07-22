@@ -1,4 +1,6 @@
-﻿-- MARTS: punctuality per line
+﻿
+{{ config(materialized='table') }}
+-- MARTS: punctuality per line
 -- Compares actual vehicle timestamps at stops against the GTFS schedule.
 select
     line,
@@ -15,3 +17,4 @@ from {{ ref('int_vehicle_delays') }}
 group by line
 having count(*) >= 10
 order by avg_delay_min desc
+
