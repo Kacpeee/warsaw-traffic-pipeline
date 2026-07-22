@@ -1,14 +1,23 @@
 ﻿-- STAGING: clean raw vehicle positions
--- Each collector writes its own file (buses / trams) to avoid concurrent
--- writes; DuckDB reads them all through a glob pattern.
+--
+-- Historical data lives in CSV, new runs write Parquet (smaller, typed,
+-- ~5x better compression). Both are read through glob patterns and unioned.
 {{ config(
     materialized='incremental',
     unique_key=['vehicle_number', 'vehicle_time'],
     incremental_strategy='delete+insert'
 ) }}
 
-with source as (
-    select *
+with csv_source as (
+    select
+        try_cast(fetch_time as timestamp)   as fetch_time,
+        try_cast(vehicle_time as timestamp) as vehicle_time,
+        vehicle_number,
+        line,
+        brigade,
+        try_cast(vehicle_type as integer)   as vehicle_type,
+        try_cast(lat as double)             as lat,
+        try_cast(lon as double)             as lon
     from read_csv(
         '../data/positions_*.csv',
         header = false,
@@ -24,25 +33,36 @@ with source as (
             'vehicle_time': 'VARCHAR'
         }
     )
+    where fetch_time <> 'fetch_time'
 ),
 
-cleaned as (
+parquet_source as (
     select
-        cast(fetch_time as timestamp)      as fetch_time,
-        cast(vehicle_time as timestamp)    as vehicle_time,
+        fetch_time,
+        vehicle_time,
         vehicle_number,
         line,
         brigade,
-        cast(vehicle_type as integer)      as vehicle_type,
-        cast(lat as double)                as lat,
-        cast(lon as double)                as lon
-    from source
-    where fetch_time <> 'fetch_time'
-      and try_cast(lat as double) is not null
-      and try_cast(lon as double) is not null
-      and try_cast(vehicle_time as timestamp) is not null
-      and try_cast(lat as double) between 51.9 and 52.5
-      and try_cast(lon as double) between 20.7 and 21.3
+        cast(vehicle_type as integer) as vehicle_type,
+        lat,
+        lon
+    from read_parquet('../data/positions_*.parquet')
+),
+
+combined as (
+    select * from csv_source
+    union all
+    select * from parquet_source
+),
+
+cleaned as (
+    select *
+    from combined
+    where lat is not null
+      and lon is not null
+      and vehicle_time is not null
+      and lat between 51.9 and 52.5
+      and lon between 20.7 and 21.3
 ),
 
 -- A stationary vehicle reports the same vehicle_time on every poll, so keep
