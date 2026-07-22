@@ -17,3 +17,6 @@ raw_positions.csv
 # Helper/scratch scripts
 sprawdz.py
 warsaw_dbt/peek.py
+
+# GTFS data (large, downloaded separately)
+gtfs/
