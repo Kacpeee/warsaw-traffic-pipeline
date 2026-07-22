@@ -39,6 +39,7 @@ trips_with_line as (
 -- candidate stops: every scheduled stop of every trip run by this line+brigade
 candidates as (
     select
+        st.trip_id,
         p.vehicle_number,
         p.line,
         p.brigade,
@@ -81,6 +82,7 @@ ranked as (
 )
 
 select
+    trip_id,
     vehicle_number,
     line,
     brigade,

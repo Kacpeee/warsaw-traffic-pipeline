@@ -179,3 +179,26 @@ models:
     columns:
       - name: stop_id
         tests: [not_null, unique]
+
+  - name: int_route_segments
+    description: "Travel time between consecutive stops within a single trip."
+    columns:
+      - name: actual_minutes
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0.2, max_value: 30}
+      - name: scheduled_minutes
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0.2, max_value: 30}
+
+  - name: mart_slowest_segments
+    description: "Stop-to-stop segments ranked by time lost against the schedule."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [line, from_stop, to_stop]
+    columns:
+      - name: avg_lost_min
+        tests: [not_null]
+      - name: observations
+        tests:
+          - dbt_utils.accepted_range: {min_value: 5}
