@@ -1,5 +1,7 @@
 ﻿# Warsaw Transit Pipeline
 
+[![dbt CI](https://github.com/Kacpeee/warsaw-traffic-pipeline/actions/workflows/dbt-ci.yml/badge.svg)](https://github.com/Kacpeee/warsaw-traffic-pipeline/actions/workflows/dbt-ci.yml) [![Python CI](https://github.com/Kacpeee/warsaw-traffic-pipeline/actions/workflows/python-ci.yml/badge.svg)](https://github.com/Kacpeee/warsaw-traffic-pipeline/actions/workflows/python-ci.yml)
+
 Data pipeline that collects **live vehicle positions** from Warsaw's public transport API,
 joins them with the **GTFS timetable**, and computes **speed** and **punctuality** per line,
 stop and hour.
@@ -19,17 +21,9 @@ Median delay across the network is under a minute; suburban lines (L16, L26) run
 **Python** (API collector) · **dbt** (12 models, 21 tests) · **DuckDB** · **Airflow** (hourly orchestration)
 
 ## How it works
-
-\\\
-ZTM API  ──►  raw CSV  ──┐
-                         ├──►  staging  ──►  intermediate  ──►  marts
-GTFS zip ──►  txt files ─┘      (typed,        (speed,          (per line,
-                                 cleaned)       delays)          hour, stop)
-\\\
-
 **Live positions** are polled every minute and matched to the timetable via
-\line + brigade\. A position within 100 m of a scheduled stop counts as an arrival;
-the delay is the difference between the actual and scheduled timestamp.
+`line + brigade`. A position within 100 m of a scheduled stop counts as an
+arrival; the delay is the difference between the actual and scheduled timestamp.
 
 **Models**
 
