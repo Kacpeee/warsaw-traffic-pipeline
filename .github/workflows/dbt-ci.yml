@@ -1,0 +1,40 @@
+name: dbt CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate dbt project
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dbt
+        run: pip install dbt-duckdb==1.10.1
+
+      - name: Install packages
+        working-directory: warsaw_dbt
+        run: dbt deps
+
+      - name: Parse project
+        working-directory: warsaw_dbt
+        run: dbt parse --profiles-dir .
+
+      - name: Compile models
+        working-directory: warsaw_dbt
+        run: dbt compile --profiles-dir . --no-partial-parse
+
+      - name: Check for uncompiled SQL errors
+        working-directory: warsaw_dbt
+        run: dbt list --profiles-dir . --resource-type model
