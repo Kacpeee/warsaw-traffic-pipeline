@@ -20,3 +20,12 @@ warsaw_dbt/peek.py
 
 # GTFS data (large, downloaded separately)
 gtfs/
+
+# Scratch/inspection scripts
+warsaw_dbt/check*.py
+warsaw_dbt/sprawdz*.py
+warsaw_dbt/czasy.py
+warsaw_dbt/zakres.py
+warsaw_dbt/headway.py
+warsaw_dbt/segments.py
+warsaw_dbt/peek.py
