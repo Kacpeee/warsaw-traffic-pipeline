@@ -3,6 +3,20 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 
+TEMPLATE = 'plotly_dark'
+ACCENT = '#4C9BE8'
+
+def style(fig, height=380):
+    fig.update_layout(
+        template=TEMPLATE, height=height, coloraxis_showscale=False,
+        margin=dict(l=10, r=10, t=50, b=10),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=13), title_font_size=16,
+        xaxis=dict(gridcolor='rgba(255,255,255,0.08)'),
+        yaxis=dict(gridcolor='rgba(255,255,255,0.08)'),
+    )
+    return fig
+
 st.set_page_config(page_title='Warsaw Transit', layout='wide')
 
 DB = 'warsaw_dbt/dev.duckdb'
@@ -28,9 +42,9 @@ overview = q('''
 ''').iloc[0]
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric('Positions collected', f"{overview.positions:,}")
-c2.metric('Movements', f"{overview.moves:,}")
-c3.metric('Matched to schedule', f"{overview.matched:,}")
+c1.metric('Positions collected', f"{int(overview.positions):,}")
+c2.metric('Movements', f"{int(overview.moves):,}")
+c3.metric('Matched to schedule', f"{int(overview.matched):,}")
 c4.metric('Median speed', f"{overview.med_speed} km/h")
 c5.metric('Median delay', f"{overview.med_delay} min")
 
@@ -48,15 +62,16 @@ with tab1:
     if df.empty:
         st.info('No data yet.')
     else:
-        fig = px.bar(df, x='hour_of_day', y='avg_speed',
+        df['hour_of_day'] = df['hour_of_day'].astype(str)
+        fig = px.bar(df, x='hour_of_day', y='avg_speed', color_discrete_sequence=[ACCENT], text_auto='.1f',
                      labels={'hour_of_day':'Hour of day','avg_speed':'Average speed (km/h)'},
                      title='Average speed by hour')
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(style(fig), width='stretch')
 
-        fig2 = px.line(df, x='hour_of_day', y='pct_crawling', markers=True,
+        fig2 = px.line(df, x='hour_of_day', y='pct_crawling', markers=True, color_discrete_sequence=[ACCENT],
                        labels={'hour_of_day':'Hour of day','pct_crawling':'% of time below 5 km/h'},
                        title='Congestion indicator')
-        st.plotly_chart(fig2, width='stretch')
+        st.plotly_chart(style(fig2), width='stretch')
         st.dataframe(df, width='stretch', hide_index=True)
 
 # --- punctuality --------------------------------------------------------
@@ -65,18 +80,21 @@ with tab2:
     with col_a:
         d1 = q('select * from mart_punctuality_by_hour order by hour_of_day')
         if not d1.empty:
-            fig = px.bar(d1, x='hour_of_day', y='avg_delay_min',
+            d1['hour_of_day'] = d1['hour_of_day'].astype(str)
+            fig = px.bar(d1, x='hour_of_day', y='avg_delay_min', color='avg_delay_min', color_continuous_scale='RdYlGn_r', text_auto='.1f',
                          labels={'hour_of_day':'Hour','avg_delay_min':'Average delay (min)'},
                          title='Delay by hour of day')
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(style(fig), width='stretch')
     with col_b:
-        d2 = q('select * from mart_line_punctuality order by avg_delay_min desc limit 20')
+        d2 = q('select * from mart_line_punctuality order by avg_delay_min desc limit 10')
         if not d2.empty:
-            fig = px.bar(d2, x='avg_delay_min', y='line', orientation='h',
+            d2['line'] = d2['line'].astype(str)
+            fig = px.bar(d2, x='avg_delay_min', y='line', orientation='h', color='avg_delay_min', color_continuous_scale='RdYlGn_r', text_auto='.1f',
                          labels={'avg_delay_min':'Average delay (min)','line':'Line'},
                          title='Least punctual lines')
+            fig.update_traces(textposition='outside')
             fig.update_layout(yaxis={'categoryorder':'total ascending'})
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(style(fig), width='stretch')
     st.dataframe(q('select * from mart_line_punctuality'), width='stretch', hide_index=True)
 
 # --- worst stops --------------------------------------------------------
@@ -94,5 +112,5 @@ with tab3:
             color_continuous_scale='RdYlGn_r', zoom=10, height=600,
             map_style='carto-positron',
             title='Average delay per stop')
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(style(fig, 600), width='stretch')
         st.dataframe(stops, width='stretch', hide_index=True)

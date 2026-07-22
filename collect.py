@@ -13,7 +13,7 @@ from datetime import datetime
 import warsaw_data_api
 from dotenv import load_dotenv
 
-OUT = "raw_positions.csv"
+OUT_DIR = "data"  # one file per mode avoids concurrent writes
 HEADER = ["fetch_time", "vehicle_number", "line", "brigade",
           "type", "lat", "lon", "vehicle_time"]
 
@@ -26,6 +26,9 @@ args = parser.parse_args()
 load_dotenv()
 ztm = warsaw_data_api.ztm(apikey=os.getenv("WARSAW_DATA_API_KEY"))
 fetch = ztm.get_buses_location if args.mode == "buses" else ztm.get_trams_location
+
+os.makedirs(OUT_DIR, exist_ok=True)
+OUT = os.path.join(OUT_DIR, f"positions_{args.mode}.csv")
 
 # write the header only when creating the file
 if not os.path.exists(OUT) or os.path.getsize(OUT) == 0:
