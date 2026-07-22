@@ -7,6 +7,7 @@ schedule - independent of the hourly position collection.
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
+from warsaw_alerts import DEFAULT_ARGS
 from warsaw_datasets import GTFS_DATA
 
 GTFS_URL = "https://mkuran.pl/gtfs/warsaw.zip"
@@ -41,7 +42,7 @@ with DAG(
     start_date=datetime(2026, 7, 1),
     schedule="0 4 * * *",              # every day at 04:00
     catchup=False,
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=10)},
+    default_args={**DEFAULT_ARGS, "retries": 2, "retry_delay": timedelta(minutes=10)},
     tags=["traffic", "gtfs", "source"],
 ) as dag:
 

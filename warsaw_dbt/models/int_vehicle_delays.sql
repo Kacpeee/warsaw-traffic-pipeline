@@ -1,4 +1,4 @@
--- INTERMEDIATE: match live GPS positions to scheduled stop times
+﻿-- INTERMEDIATE: match live GPS positions to scheduled stop times
 --
 -- Approach:
 --   1. join positions to GTFS trips via (line, brigade)
@@ -8,7 +8,11 @@
 --
 -- Only stops within STOP_RADIUS_M are considered a match, and only the
 -- closest scheduled arrival in time is kept per position.
-{{ config(materialized='table') }}
+{{ config(
+    materialized='incremental',
+    unique_key=['vehicle_number', 'actual_time'],
+    incremental_strategy='delete+insert'
+) }}
 
 with valid_positions as (
     select
@@ -23,6 +27,10 @@ with valid_positions as (
     -- drop stale positions: the API returns last-known location, which can be
     -- days or even years old for vehicles that stopped reporting
     where vehicle_time >= current_date - interval 2 day
+    {% if is_incremental() %}
+      -- only match positions collected since the last run
+      and vehicle_time > (select coalesce(max(actual_time), timestamp '1970-01-01') from {{ this }})
+    {% endif %}
 ),
 
 trips_with_line as (

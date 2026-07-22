@@ -31,10 +31,41 @@ def q(sql):
 st.title('Warsaw Public Transport')
 st.caption('Live vehicle positions matched against the GTFS timetable')
 
+# --- filters ------------------------------------------------------------
+with st.sidebar:
+    st.header('Filters')
+
+    modes = q("select distinct vehicle_type from stg_positions order by 1")
+    mode_labels = {1: 'Bus', 2: 'Tram'}
+    chosen_modes = st.multiselect(
+        'Vehicle type',
+        options=[mode_labels.get(m, str(m)) for m in modes['vehicle_type']],
+        default=[mode_labels.get(m, str(m)) for m in modes['vehicle_type']],
+    )
+
+    min_obs = st.slider(
+        'Minimum observations', min_value=5, max_value=200, value=10, step=5,
+        help='Drop lines or stops with too few measurements to be meaningful.',
+    )
+
+    hours = st.slider(
+        'Hour of day', min_value=0, max_value=23, value=(0, 23),
+        help='Restrict time-based views to a window of the day.',
+    )
+
+    st.divider()
+    st.caption(
+        'Filters apply to the aggregate views. Underlying models are rebuilt '
+        'hourly by Airflow.'
+    )
+
+MODE_IDS = [k for k, v in mode_labels.items() if v in chosen_modes] or [1, 2]
+
 # --- headline numbers -------------------------------------------------
-overview = q('''
+overview = q(f'''
     select
-        (select count(*) from stg_positions)          as positions,
+        (select count(*) from stg_positions
+         where vehicle_type in ({','.join(map(str, MODE_IDS))}))  as positions,
         (select count(*) from int_vehicle_moves)      as moves,
         (select count(*) from int_vehicle_delays)     as matched,
         (select round(median(speed_kmh),1) from int_vehicle_moves)     as med_speed,
@@ -53,12 +84,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 
 # --- speed -------------------------------------------------------------
 with tab1:
-    df = q('''
+    df = q(f'''
         select hour_of_day,
                sum(measurements) as n,
                round(sum(avg_speed_kmh*measurements)/sum(measurements),1) as avg_speed,
                round(sum(pct_crawling*measurements)/sum(measurements),1)  as pct_crawling
-        from mart_speed_by_hour group by 1 order by 1
+        from mart_speed_by_hour
+        where measurements >= {min_obs}
+          and hour_of_day between {hours[0]} and {hours[1]}
+        group by 1 order by 1
     ''')
     if df.empty:
         st.info('No data yet.')
@@ -79,7 +113,7 @@ with tab1:
 with tab2:
     col_a, col_b = st.columns(2)
     with col_a:
-        d1 = q('select * from mart_punctuality_by_hour order by hour_of_day')
+        d1 = q(f'select * from mart_punctuality_by_hour where measurements >= {min_obs} and hour_of_day between {hours[0]} and {hours[1]} order by hour_of_day')
         if not d1.empty:
             d1['hour_of_day'] = d1['hour_of_day'].astype(str)
             fig = px.bar(d1, x='hour_of_day', y='avg_delay_min', color='avg_delay_min', color_continuous_scale='RdYlGn_r', text_auto='.1f',
@@ -87,7 +121,7 @@ with tab2:
                          title='Delay by hour of day')
             st.plotly_chart(style(fig), width='stretch')
     with col_b:
-        d2 = q('select * from mart_line_punctuality order by avg_delay_min desc limit 10')
+        d2 = q(f'select * from mart_line_punctuality where measurements >= {min_obs} order by avg_delay_min desc limit 10')
         if not d2.empty:
             d2['line'] = d2['line'].astype(str)
             fig = px.bar(d2, x='avg_delay_min', y='line', orientation='h', color='avg_delay_min', color_continuous_scale='RdYlGn_r', text_auto='.1f',
@@ -96,11 +130,11 @@ with tab2:
             fig.update_traces(textposition='outside')
             fig.update_layout(yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(style(fig), width='stretch')
-    st.dataframe(q('select * from mart_line_punctuality'), width='stretch', hide_index=True)
+    st.dataframe(q(f'select * from mart_line_punctuality where measurements >= {min_obs}'), width='stretch', hide_index=True)
 
 # --- worst stops --------------------------------------------------------
 with tab3:
-    stops = q('select * from mart_worst_stops')
+    stops = q(f'select * from mart_worst_stops where measurements >= {min_obs}')
     if stops.empty:
         st.info('Not enough measurements per stop yet.')
     else:
@@ -126,7 +160,7 @@ with tab4:
         "Only frequent services (average headway under 20 min) are shown."
     )
 
-    reg = q('select * from mart_line_regularity')
+    reg = q(f'select * from mart_line_regularity where observations >= {min_obs}')
     if reg.empty:
         st.info('Not enough data yet.')
     else:
@@ -176,7 +210,7 @@ with tab5:
         "gap or a recurring bottleneck rather than a one-off delay."
     )
 
-    seg = q('select * from mart_slowest_segments')
+    seg = q(f'select * from mart_slowest_segments where observations >= {min_obs}')
     if seg.empty:
         st.info('Not enough data yet.')
     else:
