@@ -32,6 +32,7 @@ cleaned as (
     where lat is not null
       and lon is not null
       and vehicle_time is not null
+      and fetch_time <> 'fetch_time'
       -- Warsaw bounding box: drop obviously invalid coordinates
       and cast(lat as double) between 51.9 and 52.5
       and cast(lon as double) between 20.7 and 21.3

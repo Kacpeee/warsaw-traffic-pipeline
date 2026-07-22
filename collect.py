@@ -10,7 +10,7 @@ ztm = warsaw_data_api.ztm(apikey=os.getenv("WARSAW_DATA_API_KEY"))
 
 OUT = "raw_positions.csv"
 INTERVAL = 60          # sekundy miedzy odpytaniami
-ITERATIONS = 60        # ile razy odpytac (60 x 60s = 1 godzina)
+ITERATIONS = 5        # ile razy odpytac (60 x 60s = 1 godzina)
 
 # naglowek tylko jesli plik nie istnieje
 write_header = not os.path.exists(OUT)
