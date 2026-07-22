@@ -71,3 +71,11 @@ cd airflow && docker compose up -d               # Airflow at localhost:8080
 
 Data is collected only while the machine is running, so coverage has gaps.
 Per-stop statistics are based on small samples and should be read as directional.
+
+## Dashboard
+
+![Average delay per stop](docs/dashboard.png)
+
+Interactive Streamlit dashboard: speed by hour, punctuality per line, and a map
+of average delay across the network. Green stops run close to schedule, red ones
+accumulate delays - the pattern follows main corridors through the city centre.
