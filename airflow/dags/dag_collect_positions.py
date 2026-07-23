@@ -19,7 +19,14 @@ with DAG(
     schedule="0 * * * *",              # hourly
     catchup=False,
     max_active_runs=1,                 # never overlap collectors
-    default_args={**DEFAULT_ARGS, "retries": 1, "retry_delay": timedelta(minutes=2)},
+    default_args={
+        **DEFAULT_ARGS,
+        "retries": 1,
+        "retry_delay": timedelta(minutes=2),
+        # a collector run should take ~55 min; anything longer means it is
+        # stuck retrying a dead connection rather than gathering data
+        "execution_timeout": timedelta(minutes=70),
+    },
     tags=["traffic", "source"],
 ) as dag:
 
