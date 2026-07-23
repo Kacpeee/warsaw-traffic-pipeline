@@ -29,3 +29,8 @@ warsaw_dbt/zakres.py
 warsaw_dbt/headway.py
 warsaw_dbt/segments.py
 warsaw_dbt/peek.py
+
+# Collected data
+data/
+alerts.log
+warsaw_dbt/pokrycie.py

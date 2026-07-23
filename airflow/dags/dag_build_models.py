@@ -22,9 +22,17 @@ with DAG(
     tags=["traffic", "dbt", "transform"],
 ) as dag:
 
+    # A refreshed GTFS feed can drop stops that historical rows still
+    # reference, leaving orphaned foreign keys in the incremental models.
+    # Rebuilding the dependent facts keeps them consistent with the current
+    # timetable; at this scale a full refresh costs a few seconds.
     run = BashOperator(
         task_id="dbt_run",
-        bash_command=f"{DBT} run --profiles-dir . --no-partial-parse",
+        bash_command=(
+            f"{DBT} run --profiles-dir . --no-partial-parse "
+            f"--select stg_gtfs_stops+ stg_gtfs_routes+ stg_gtfs_trips+ --full-refresh && "
+            f"{DBT} run --profiles-dir . --no-partial-parse"
+        ),
     )
 
     test = BashOperator(
