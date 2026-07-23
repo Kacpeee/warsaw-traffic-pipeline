@@ -5,10 +5,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check connectivity
+      - name: Connectivity
         run: curl -sI --max-time 15 https://api.github.com | head -1
-      - name: Check ZTM API
+      - name: ZTM API
         env:
           KEY: ${{ secrets.WARSAW_API_KEY }}
-        run: |
-          curl -s --max-time 20 "https://api.um.warszawa.pl/api/action/busestrams_get/?resource_id=f2e5503e927d-4ad3-9500-4ab9e55deb59&type=1&apikey=$KEY" | head -c 300
+        run: curl -s --max-time 20 "https://api.um.warszawa.pl/api/action/busestrams_get/?resource_id=f2e5503e927d-4ad3-9500-4ab9e55deb59&type=1&apikey=$KEY" | head -c 300
