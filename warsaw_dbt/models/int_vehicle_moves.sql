@@ -18,6 +18,7 @@ moves as (
     select
         vehicle_number, line, brigade, vehicle_type,
         prev_time, vehicle_time,
+        lat, lon,
         -- elapsed time in seconds
         date_diff('second', prev_time, vehicle_time) as seconds_diff,
         -- distance in meters (equirectangular approximation)
@@ -31,7 +32,7 @@ moves as (
 with_speed as (
     select
         vehicle_number, line, brigade, vehicle_type,
-        prev_time, vehicle_time, seconds_diff, meters_diff,
+        prev_time, vehicle_time, lat, lon, seconds_diff, meters_diff,
         -- speed in km/h (m/s * 3.6)
         case
             when seconds_diff > 0

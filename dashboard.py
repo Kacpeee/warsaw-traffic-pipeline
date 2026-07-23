@@ -79,8 +79,8 @@ c3.metric('Matched to schedule', f"{int(overview.matched):,}")
 c4.metric('Median speed', f"{overview.med_speed} km/h")
 c5.metric('Median delay', f"{overview.med_delay} min")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ['Speed by hour', 'Punctuality', 'Worst stops', 'Regularity', 'Segments'])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ['Speed by hour', 'Punctuality', 'Worst stops', 'Regularity', 'Segments', 'Maps'])
 
 # --- speed -------------------------------------------------------------
 with tab1:
@@ -240,3 +240,59 @@ with tab5:
             'observations': 'Runs',
         })
         st.dataframe(detail, width='stretch', hide_index=True)
+
+
+# --- maps ---------------------------------------------------------------
+with tab6:
+    view = st.radio('View', ['Speed grid', 'Movement over time'],
+                    horizontal=True, label_visibility='collapsed')
+
+    if view == 'Speed grid':
+        st.caption(
+            'Average speed aggregated onto a ~300 m grid. Point-level speeds are '
+            'too noisy to read directly; grid cells expose the corridors where '
+            'traffic consistently slows down.'
+        )
+        grid = q(f'select * from mart_speed_grid where observations >= {min_obs}')
+        if grid.empty:
+            st.info('Not enough data yet.')
+        else:
+            fig = px.scatter_map(
+                grid, lat='cell_lat', lon='cell_lon',
+                color='avg_speed_kmh', size='observations',
+                color_continuous_scale='RdYlGn', range_color=[5, 35],
+                hover_data={'avg_speed_kmh': True, 'pct_crawling': True,
+                            'observations': True, 'cell_lat': False,
+                            'cell_lon': False},
+                zoom=10.6, center={'lat': 52.23, 'lon': 21.01},
+                height=900, map_style='carto-darkmatter',
+                labels={'avg_speed_kmh': 'Avg speed (km/h)'},
+            )
+            fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig, width='stretch')
+            st.caption(f'{len(grid):,} cells · red = slow, green = free-flowing')
+
+    else:
+        st.caption(
+            'Vehicle positions sampled every 15 minutes. Press play to watch the '
+            'network fill up in the morning and empty out overnight.'
+        )
+        frames = q('select * from mart_animation_frames order by frame_time')
+        if frames.empty:
+            st.info('Not enough data yet.')
+        else:
+            fig = px.scatter_map(
+                frames, lat='lat', lon='lon',
+                color='mode', animation_frame='frame_label',
+                hover_name='line',
+                color_discrete_map={'Bus': '#4C9BE8', 'Tram': '#E8804C'},
+                zoom=10.6, center={'lat': 52.23, 'lon': 21.01},
+                height=900, map_style='carto-darkmatter',
+            )
+            fig.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+            fig.update_traces(marker=dict(size=9))
+            st.plotly_chart(fig, width='stretch')
+            st.caption(
+                f'{len(frames):,} positions across '
+                f'{frames["frame_label"].nunique()} frames'
+            )

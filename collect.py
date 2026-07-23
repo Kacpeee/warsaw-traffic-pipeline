@@ -39,6 +39,20 @@ fetch = ztm.get_buses_location if args.mode == 'buses' else ztm.get_trams_locati
 
 os.makedirs(OUT_DIR, exist_ok=True)
 rows = []
+FLUSH_EVERY = 10   # write a batch periodically: an interrupted run would
+                   # otherwise lose everything buffered in memory
+
+
+def flush(buffer):
+    if not buffer:
+        return
+    stamp = datetime.now().strftime('%Y%m%dT%H%M%S')
+    path = os.path.join(OUT_DIR, f'positions_{args.mode}_{stamp}.parquet')
+    pq.write_table(pa.Table.from_pylist(buffer, schema=SCHEMA), path,
+                   compression='zstd')
+    print(f'wrote {len(buffer):,} rows to {path} '
+          f'({os.path.getsize(path) / 1e6:.1f} MB)', flush=True)
+    buffer.clear()
 
 for i in range(args.iterations):
     now = datetime.now().replace(microsecond=0)
@@ -64,15 +78,11 @@ for i in range(args.iterations):
     print(f'[{now}] {args.mode}: {len(vehicles)} vehicles '
           f'({i + 1}/{args.iterations}, buffered {len(rows)})', flush=True)
 
+    if (i + 1) % FLUSH_EVERY == 0:
+        flush(rows)
+
     if i < args.iterations - 1:
         time.sleep(args.interval)
 
-if rows:
-    stamp = datetime.now().strftime('%Y%m%dT%H%M%S')
-    path = os.path.join(OUT_DIR, f'positions_{args.mode}_{stamp}.parquet')
-    table = pa.Table.from_pylist(rows, schema=SCHEMA)
-    pq.write_table(table, path, compression='zstd')
-    size_mb = os.path.getsize(path) / 1e6
-    print(f'wrote {len(rows):,} rows to {path} ({size_mb:.1f} MB)')
-else:
-    print('no rows collected')
+flush(rows)
+print('done:', args.mode)
